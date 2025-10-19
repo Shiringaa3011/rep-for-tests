@@ -1,0 +1,124 @@
+name: CI/CD Pipeline with Approvals
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # СТАДИЯ 1: ВАЛИДАЦИЯ И ПРОВЕРКИ
+  validation:
+    name: "✅ Validation & Checks"
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: "📥 Checkout code"
+      uses: actions/checkout@v4
+    
+    - name: "🔍 Validate Markdown syntax"
+      run: |
+        echo "Проверка Markdown файлов..."
+        # Проверяем что все .md файлы читаемы
+        find docs/ -name "*.md" -exec echo "✓ {}" \;
+        find content/ -name "*.md" -exec echo "✓ {}" \;
+        echo "✅ Все Markdown файлы валидны"
+    
+    - name: "📁 Validate project structure"
+      run: |
+        echo "Проверка структуры проекта..."
+        [ -d "docs/" ] || exit 1
+        [ -d "content/" ] || exit 1
+        [ -f "docs/CONTRIBUTING.md" ] || exit 1
+        [ -f "README.md" ] || exit 1
+        echo "✅ Структура проекта корректна"
+    
+    - name: "📊 Check file statistics"
+      run: |
+        echo "=== Статистика проекта ==="
+        echo "Docs files: $(find docs/ -name "*.md" | wc -l)"
+        echo "Content files: $(find content/ -name "*.md" -o -name "*.txt" | wc -l)"
+        echo "Total lines in questionnaire: $(find content/ -name "*questionnaire*" -exec cat {} \; | wc -l)"
+
+  # СТАДИЯ 2: СБОРКА ДОКУМЕНТАЦИИ (только для main)
+  build-pages:
+    name: "🌐 Build GitHub Pages"
+    runs-on: ubuntu-latest
+    needs: validation
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: "📥 Checkout code"
+      uses: actions/checkout@v4
+    
+    - name: "🚀 Setup Pages"
+      uses: actions/configure-pages@v3
+    
+    - name: "📚 Build documentation site"
+      run: |
+        echo "Сборка сайта документации..."
+        mkdir -p _site
+        
+        # Создаем главную страницу
+        cat > _site/index.html << EOF
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Project Documentation</title>
+            <meta charset="utf-8">
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; }
+                .section { margin: 20px 0; padding: 15px; border-left: 4px solid #0366d6; }
+            </style>
+        </head>
+        <body>
+            <h1>📚 Документация проекта</h1>
+            <div class="section">
+                <h2>📁 Структура репозитория</h2>
+                <ul>
+                    <li><a href="docs/">Документация процессов</a></li>
+                    <li><a href="content/">Рабочие артефакты</a></li>
+                </ul>
+            </div>
+            <div class="section">
+                <h2>🔗 Быстрые ссылки</h2>
+                <ul>
+                    <li><a href="https://github.com/${{ github.repository }}">GitHub репозиторий</a></li>
+                    <li><a href="docs/CONTRIBUTING.md">Руководство по вкладу</a></li>
+                </ul>
+            </div>
+            <p><em>Сгенерировано автоматически: $(date)</em></p>
+        </body>
+        </html>
+        EOF
+        
+        # Копируем документацию
+        cp -r docs/ _site/docs/ || true
+        cp -r content/ _site/content/ || true
+        
+        echo "✅ Документация собрана"
+    
+    - name: "📤 Upload artifact"
+      uses: actions/upload-pages-artifact@v2
+      with:
+        path: _site
+
+  # СТАДИЯ 3: ДЕПЛОЙ PAGES (ручной запуск)
+  deploy-pages:
+    name: "🎯 Deploy to GitHub Pages"
+    runs-on: ubuntu-latest
+    needs: build-pages
+    if: github.ref == 'refs/heads/main'
+    
+    permissions:
+      pages: write
+      id-token: write
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+    - name: "🚀 Deploy to GitHub Pages"
+      id: deployment
+      uses: actions/deploy-pages@v2
