@@ -58,14 +58,13 @@ jobs:
           fi
           echo "✅ Все коммиты соответствуют шаблону"
 
-      - name: Validate PR title (used for squash commit)
-        if: github.event_name == 'pull_request'
+      - name: Validate PR title
         run: |
           TITLE="${{ github.event.pull_request.title }}"
           echo "PR title: $TITLE"
-          # тот же формат, что и для коммитов
-          if [[ ! "$TITLE" =~ ^(fix|docs|content|feat|chore|refactor|test|style|ci):\  .+ ]]; then
-            echo "❌ Заголовок PR должен быть в формате 'тип: Краткое описание'"
+          if echo "$TITLE" | grep -Eq '^(docs|fix|content): '; then
+            echo "✅ Title is valid"
+          else
+            echo "❌ Invalid PR title format. Expected something like 'fix: исправлено ...'"
             exit 1
           fi
-          echo "✅ PR title OK"
