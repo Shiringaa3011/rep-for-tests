@@ -3,7 +3,7 @@ matrix:
     sources:
       - '**/*.md'
     aspell:
-      lang: ru
-      d: ru_RU
+      #lang: ru
+      #d: ru_RU
       mode: markdown
       ignore-case: true
