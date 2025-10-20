@@ -1,0 +1,71 @@
+name: Validate branch, commits and PR title
+
+on:
+  push:
+    # проверяем коммиты в ветках (например при пуше)
+    branches-ignore:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate branch name (for PRs)
+        if: github.event_name == 'pull_request'
+        run: |
+          BRANCH="${{ github.head_ref }}"
+          echo "Branch: $BRANCH"
+          # Разрешаем типы: fix, docs, content, feature, bugfix, hotfix
+          if [[ ! "$BRANCH" =~ ^(fix|docs|content|feature|bugfix|hotfix)\/[a-z0-9._-]+$ ]]; then
+            echo "❌ Неправильное имя ветки. Ожидается формат: тип/краткое-описание"
+            echo "Допустимые типы: fix, docs, content, feature, bugfix, hotfix"
+            exit 1
+          fi
+          echo "✅ Имя ветки корректно"
+
+      - name: Validate commit messages in branch
+        run: |
+          # сравнить с main, если main есть в remote
+          BASE=origin/main
+          git fetch origin main --depth=1 || true
+          RANGE="$BASE..HEAD"
+          echo "Commit range: $RANGE"
+          # шаблон: тип: Описание
+          PATTERN='^(fix|docs|content|feat|chore|refactor|test|style|ci): .+'
+          FAIL=0
+          # Получаем список сообщений (каждое сообщение в отдельную строку)
+          git log --pretty=format:"%s" $RANGE | while IFS= read -r MSG; do
+            if [[ ! "$MSG" =~ $PATTERN ]]; then
+              echo "❌ Неподходящее сообщение коммита: '$MSG'"
+              FAIL=1
+            else
+              echo "✓ $MSG"
+            fi
+          done
+          if [ "$FAIL" = "1" ]; then
+            echo "Ошибка: найдены коммиты, не соответствующие правилам."
+            exit 1
+          fi
+          echo "✅ Все коммиты соответствуют шаблону"
+
+      - name: Validate PR title (used for squash commit)
+        if: github.event_name == 'pull_request'
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          echo "PR title: $TITLE"
+          # тот же формат, что и для коммитов
+          if [[ ! "$TITLE" =~ ^(fix|docs|content|feat|chore|refactor|test|style|ci):\  .+ ]]; then
+            echo "❌ Заголовок PR должен быть в формате 'тип: Краткое описание'"
+            exit 1
+          fi
+          echo "✅ PR title OK"
